@@ -4,18 +4,17 @@ import json
 
 import networkx as nx
 from networkx.algorithms import bipartite
+from cdlib import algorithms, classes, evaluation, readwrite
 
 class SpotifyGraph():
 
     def __init__(self, dir, features_dir):
-        
-        self.base_dir = dir
-        self.tracks_pth = path.join(dir, "tracks.json")
-        self.col_pth = path.join(dir, "collections.json")
-        self.graph_pth = path.join(dir, "graph.json")
 
-        self.img_dir = path.join(dir, "images")
-        self.clip_dir = path.join(dir, "clips")
+        self.base_dir = path.join(dir, "dataset")
+        self.save_dir = path.join(dir, "results")
+        self.tracks_pth = path.join(self.base_dir, "tracks.json")
+        self.col_pth = path.join(self.base_dir, "collections.json")
+        self.graph_pth = path.join(self.base_dir, "graph.json")
 
         self.ft_dir = features_dir
         self.features_dict = {}
@@ -25,10 +24,10 @@ class SpotifyGraph():
 
     def load(self):
         print("Loading graph...")
-        with open(self.tracks_pth, "r", encoding="utf-8") as f:
-            self.tracks = json.load(f)
-        with open(self.col_pth, "r", encoding="utf-8") as f:
-            self.collections = json.load(f)
+        # with open(self.tracks_pth, "r", encoding="utf-8") as f:
+        #     self.tracks = json.load(f)
+        # with open(self.col_pth, "r", encoding="utf-8") as f:
+        #     self.collections = json.load(f)
         with open(self.graph_pth, "r", encoding="utf-8") as f:
             self.graph = json.load(f)
     
@@ -36,15 +35,15 @@ class SpotifyGraph():
         '''Get dataset as a NetworkX graph.'''
         
         g = nx.Graph()
-        g.add_nodes_from(self.graph["collections"], bipartite=0)
-        g.add_nodes_from(self.graph["tracks"], bipartite=1) 
+        #g.add_nodes_from(self.graph["collections"], bipartite=0)
+        #g.add_nodes_from(self.graph["tracks"], bipartite=1) 
         edge_tuples = [ (e["from"], e["to"]) for e in self.graph["edges"] ] 
         g.add_edges_from( edge_tuples )
 
-        track_ids = list(self.tracks)
-        col_ids = list(self.collections)
+        # track_ids = list(self.graph["tracks"])
+        # col_ids = list(self.graph["collections"])
 
-        return g, track_ids, col_ids
+        return g#, track_ids, col_ids
     
     def get_playlists_vs_albums(self):
         playlist_ids, album_ids = [],[]
@@ -70,30 +69,59 @@ class SpotifyGraph():
         return playlist_ids
     
     def get_projected_graph(self, graph, is_multigraph=False):
-        G_projected = bipartite.projected_graph(graph, self.graph["tracks"], multigraph=is_multigraph)
+        G_projected = bipartite.projected_graph(graph, graph.nodes, multigraph=is_multigraph)
         return G_projected
+    
+    def save_community(self, pred, algo_name):
+        readwrite.write_community_csv(pred, path.join(self.save_dir, "{}_communities.csv".format(algo_name)), ",")
+
+    def find_communities(self, g, algorithm):
+        algorithm_name = algorithm.__name__
+        try:
+            print("Starting community detection for {} algorithm".format(algorithm_name))
+            if algorithm_name == "overlapping_seed_set_expansion":
+                #list of nodes as seeds (preferably each in different community)
+                list_of_seeds = []
+                community_prediction = algorithm(g, seeds=list_of_seeds)
+            else:
+                community_prediction = algorithm(g)
+            self.save_community(community_prediction, algorithm_name)
+        except Exception as e:
+            print("Error with {} algorithm".format(algorithm_name))
+            print(type(e), e)
+        else:
+            print("Saved communities file for {} algorithm".format(algorithm_name))
+
 
 if __name__ == "__main__":
 
     # Example usage of the SpotifyGraph dataset class
     root = os.getcwd()
-    dataset = SpotifyGraph(path.join(root, "dataset"), None)
-    g, track_ids, col_ids = dataset.to_nx_graph()
-
+    dataset = SpotifyGraph(root, None)
+    g = dataset.to_nx_graph()
+    print("Starting projection...")
+    g = dataset.get_projected_graph(g)
 
     # GT_IDS for evaluation after community detection
-    playlist_ids, album_ids = dataset.get_playlists_vs_albums()
+    #playlist_ids, album_ids = dataset.get_playlists_vs_albums()
 
 
     # hand picked filter words that occour in name or description of the playlists
-    keywords = ["fitness", "workout"]       
-    selected_ids = dataset.get_playlists_by_keywords(keywords)
-    print(len(selected_ids))
-
+    #keywords = ["fitness", "workout"]       
+    #selected_ids = dataset.get_playlists_by_keywords(keywords)
 
     # TO-DO: community detection with different algorithms
-
-
+    list_of_overlapping_algorithms = [algorithms.aslpaw, 
+                                      algorithms.dcs, 
+                                      algorithms.lais2,
+                                      algorithms.overlapping_seed_set_expansion,
+                                      algorithms.umstmo,
+                                      algorithms.percomvc,
+                                     ]
+    print("Starting community detection...")
+    for algo in list_of_overlapping_algorithms:
+        dataset.find_communities(g, algo)
+        print()
 
 
     # JSON COLLECTIONS STRUCTURE FOR EACH PLAYLIST - example
