@@ -12,15 +12,14 @@ class SpotifyGraph():
 
         self.base_dir = path.join(dir, "dataset")
         self.save_dir = path.join(dir, "results")
-        self.tracks_pth = path.join(self.base_dir, "tracks.json")
-        self.col_pth = path.join(self.base_dir, "collections.json")
-        self.graph_pth = path.join(self.base_dir, "graph.json")
+        # self.tracks_pth = path.join(self.base_dir, "tracks.json")
+        # self.col_pth = path.join(self.base_dir, "collections.json")
+        self.graph_pth = path.join(self.base_dir, "filtered_graph.json")
 
         self.ft_dir = features_dir
         self.features_dict = {}
 
         self.load()
-
 
     def load(self):
         print("Loading graph...")
@@ -30,21 +29,39 @@ class SpotifyGraph():
         #     self.collections = json.load(f)
         with open(self.graph_pth, "r", encoding="utf-8") as f:
             self.graph = json.load(f)
-    
+
+    def save_graph(self, G):
+        with open(path.join(self.base_dir, "filtered_graph.json"), "w", encoding="utf-8") as f:
+            json.dump(dict(tracks=[n for n in G.nodes() if n not in self.col_ids_deg.keys()],
+                           collections=[n for n in G.nodes() if n in self.col_ids_deg.keys()],
+                           edges=[{"from" : u, "to" : v} for u,v in G.edges()]),
+                           f, ensure_ascii=False, indent=2)
+
     def to_nx_graph(self):
         '''Get dataset as a NetworkX graph.'''
         
         g = nx.Graph()
-        #g.add_nodes_from(self.graph["collections"], bipartite=0)
-        #g.add_nodes_from(self.graph["tracks"], bipartite=1) 
+        g.add_nodes_from(self.graph["collections"], bipartite=0)
+        g.add_nodes_from(self.graph["tracks"], bipartite=1) 
         edge_tuples = [ (e["from"], e["to"]) for e in self.graph["edges"] ] 
         g.add_edges_from( edge_tuples )
 
-        # track_ids = list(self.graph["tracks"])
-        # col_ids = list(self.graph["collections"])
+        #self.track_ids_deg = {i : g.degree[i] for i in self.graph["tracks"]}
+        #col_ids_deg = {i : g.degree[i] for i in self.graph["collections"]}
 
-        return g#, track_ids, col_ids
-    
+        return g#, track_ids_deg, col_ids_deg
+
+    def filter_graph(self, g, deg=1):
+        print("Removing nodes with k<={}...".format(deg))
+        print("Num nodes before: {}".format(len(g.nodes)))
+        nodes_to_remove = [i for (i, d) in self.track_ids_deg.items() if d <= deg]
+        g.remove_nodes_from(nodes_to_remove)
+        print("Num nodes after: {}".format(len(g.nodes)))
+        largest_cc = max(nx.connected_components(g), key=len)
+        print("Saving new graph...")
+        self.save_graph(g.subgraph(largest_cc))
+
+
     def get_playlists_vs_albums(self):
         playlist_ids, album_ids = [],[]
         for id,info in self.collections.items():
@@ -97,10 +114,10 @@ if __name__ == "__main__":
 
     # Example usage of the SpotifyGraph dataset class
     root = os.getcwd()
-    dataset = SpotifyGraph(root, None)
-    g = dataset.to_nx_graph()
+    data = SpotifyGraph(root, None)
+    g = data.to_nx_graph()
     print("Starting projection...")
-    g = dataset.get_projected_graph(g)
+    g = data.get_projected_graph(g)
 
     # GT_IDS for evaluation after community detection
     #playlist_ids, album_ids = dataset.get_playlists_vs_albums()
@@ -114,13 +131,13 @@ if __name__ == "__main__":
     list_of_overlapping_algorithms = [algorithms.aslpaw, 
                                       algorithms.dcs, 
                                       algorithms.lais2,
-                                      algorithms.overlapping_seed_set_expansion,
+                                      #algorithms.overlapping_seed_set_expansion,
                                       algorithms.umstmo,
                                       algorithms.percomvc,
                                      ]
     print("Starting community detection...")
     for algo in list_of_overlapping_algorithms:
-        dataset.find_communities(g, algo)
+        data.find_communities(g, algo)
         print()
 
 
