@@ -86,7 +86,7 @@ class SpotifyGraph():
         return playlist_ids
     
     def get_projected_graph(self, graph, is_multigraph=False):
-        G_projected = bipartite.projected_graph(graph, graph.nodes, multigraph=is_multigraph)
+        G_projected = bipartite.projected_graph(graph, [n for n, a in graph.nodes(data=True) if a["bipartite"]==1], multigraph=is_multigraph)
         return G_projected
     
     def save_community(self, pred, algo_name):
@@ -129,8 +129,8 @@ if __name__ == "__main__":
 
     # TO-DO: community detection with different algorithms
     list_of_overlapping_algorithms = [algorithms.aslpaw, 
-                                      algorithms.dcs, 
-                                      algorithms.lais2,
+                                      #algorithms.dcs, 
+                                      #algorithms.lais2,
                                       #algorithms.overlapping_seed_set_expansion,
                                       algorithms.umstmo,
                                       algorithms.percomvc,
