@@ -116,8 +116,10 @@ if __name__ == "__main__":
     root = os.getcwd()
     data = SpotifyGraph(root, None)
     g = data.to_nx_graph()
+    print("Num nodes:", len(g))
     print("Starting projection...")
     g = data.get_projected_graph(g)
+    print("Num nodes:", len(g))
 
     # GT_IDS for evaluation after community detection
     #playlist_ids, album_ids = dataset.get_playlists_vs_albums()
@@ -129,8 +131,8 @@ if __name__ == "__main__":
 
     # TO-DO: community detection with different algorithms
     list_of_overlapping_algorithms = [algorithms.aslpaw, 
-                                      #algorithms.dcs, 
-                                      #algorithms.lais2,
+                                      algorithms.dcs, 
+                                      algorithms.lais2,
                                       #algorithms.overlapping_seed_set_expansion,
                                       algorithms.umstmo,
                                       algorithms.percomvc,
