@@ -83,10 +83,10 @@ def get_genre(genre) :
 slim_tracks = {}
 other_count = defaultdict(int)
 
-n_of_songs = 30000000
-with open('dataset/filtered_graph.json', "r", encoding="utf-8") as f:
-    graph = json.load(f)
-    filtered_tracks = graph["tracks"]
+n_of_songs = 15000000
+#with open('dataset/filtered_graph.json', "r", encoding="utf-8") as f:
+#    graph = json.load(f)
+#    filtered_tracks = graph["tracks"]
 
 with open('dataset/tracks.json', 'r', encoding='utf-8') as file:
 
@@ -96,20 +96,15 @@ with open('dataset/tracks.json', 'r', encoding='utf-8') as file:
     name = 'error'
     artist = 'error'
     genre = 'other'
-    keep = True
-    for i in tqdm(range(int(n_of_songs))): 
+    while i < n_of_songs: 
         line = file.readline()
         if ': {' in line :
             song_id = line.split('"')[1]
-            if song_id in filtered_tracks:
-                keep = True
-            else:
-                keep = False
-        elif 'name' in line and keep:
+        elif 'name' in line:
             name = line.split('"')[3]
-        elif 'artist"' in line and keep:
+        elif 'artist"' in line:
             artist = line.split('"')[3]
-        elif 'artist_genres' in line and keep:
+        elif 'artist_genres' in line:
             in_list = True
             if '[]' in line :
                 in_list = False
@@ -120,14 +115,14 @@ with open('dataset/tracks.json', 'r', encoding='utf-8') as file:
                     break
                 if 'other' in genre :
                     genre = get_genre(line)
-        elif '},' in line and keep:
+        elif '},' in line:
             slim_tracks[song_id] = {'name' : name, 'artist' : artist, 'genre' : genre}
             song_id = 'error'
             name = 'error'
             artist = 'error'
             genre = 'other'
             i += 1
-        elif '}' in line and keep:
+        elif '}' in line:
             break
         
 count = defaultdict(int)
@@ -145,7 +140,7 @@ plt.pie(y, labels = mylabels)
 plt.savefig('../piechrat.png', dpi=300)
 plt.show() 
     
-out_file = open("dataset/filtered_tracks.json", "w", encoding='utf-8')
+out_file = open("dataset/tracks_slim.json", "w", encoding='utf-8')
 json.dump(slim_tracks, out_file, indent = 4)
 
 
