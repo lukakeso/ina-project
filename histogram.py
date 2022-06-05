@@ -34,4 +34,4 @@ plt.xticks(ticks, ticklabels)
 plt.tight_layout()
 
 
-plt.savefig('orig_degree_dist.png')
+plt.savefig('degree_dist.png')

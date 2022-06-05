@@ -1,7 +1,10 @@
 import os
 from os import path
 import json
+from collections import defaultdict
+from interruptingcow import timeout
 
+from tqdm import tqdm
 import networkx as nx
 from networkx.algorithms import bipartite
 from cdlib import algorithms, classes, evaluation, readwrite
@@ -12,9 +15,9 @@ class SpotifyGraph():
 
         self.base_dir = path.join(dir, "dataset")
         self.save_dir = path.join(dir, "results")
-        # self.tracks_pth = path.join(self.base_dir, "tracks.json")
-        # self.col_pth = path.join(self.base_dir, "collections.json")
-        self.graph_pth = path.join(self.base_dir, "filtered_graph.json")
+        self.tracks_pth = path.join(self.base_dir, "tracks.json")
+        self.col_pth = path.join(self.base_dir, "collections.json")
+        self.graph_pth = path.join(self.base_dir, "graph.json")
 
         self.ft_dir = features_dir
         self.features_dict = {}
@@ -32,7 +35,7 @@ class SpotifyGraph():
 
     def save_graph(self, G):
         with open(path.join(self.base_dir, "filtered_graph.json"), "w", encoding="utf-8") as f:
-            json.dump(dict(tracks=[n for n in G.nodes() if n not in self.col_ids_deg.keys()],
+            json.dump(dict(tracks=[n for n in G.nodes() if n in self.track_ids_deg.keys()],
                            collections=[n for n in G.nodes() if n in self.col_ids_deg.keys()],
                            edges=[{"from" : u, "to" : v} for u,v in G.edges()]),
                            f, ensure_ascii=False, indent=2)
@@ -46,20 +49,26 @@ class SpotifyGraph():
         edge_tuples = [ (e["from"], e["to"]) for e in self.graph["edges"] ] 
         g.add_edges_from( edge_tuples )
 
-        #self.track_ids_deg = {i : g.degree[i] for i in self.graph["tracks"]}
-        #col_ids_deg = {i : g.degree[i] for i in self.graph["collections"]}
+        self.track_ids_deg = {i : g.degree[i] for i in self.graph["tracks"]}
+        self.col_ids_deg = {i : g.degree[i] for i in self.graph["collections"]}
 
         return g#, track_ids_deg, col_ids_deg
 
     def filter_graph(self, g, deg=1):
         print("Removing nodes with k<={}...".format(deg))
-        print("Num nodes before: {}".format(len(g.nodes)))
+        print("Num nodes before filter: {}".format(len(g.nodes)))
         nodes_to_remove = [i for (i, d) in self.track_ids_deg.items() if d <= deg]
         g.remove_nodes_from(nodes_to_remove)
-        print("Num nodes after: {}".format(len(g.nodes)))
+        # nodes_to_remove = [i for (i, d) in self.track_ids_deg.items() if d >= 51 and d <= 53]
+        # g.remove_nodes_from(nodes_to_remove)
+        print("Num nodes after filter: {}".format(len(g.nodes)))
         largest_cc = max(nx.connected_components(g), key=len)
+        print("Largest 5 CCs: ", [len(c) for c in sorted(nx.connected_components(g), key=len, reverse=True)][:5])
+        print("Num nodes final: {}".format(len(largest_cc)))
         print("Saving new graph...")
-        self.save_graph(g.subgraph(largest_cc))
+        g = g.subgraph(largest_cc)
+        self.save_graph(g)
+        return g
 
 
     def get_playlists_vs_albums(self):
@@ -91,25 +100,92 @@ class SpotifyGraph():
         G_projected = bipartite.projected_graph(graph, nodes_for_projection, multigraph=is_multigraph)
         return G_projected
     
+    def get_custom_projected_graph(self, graph, is_multigraph=False):
+        with open("dataset/custom_communities.json", "r", encoding="utf-8") as f:
+            comm = json.load(f)
+        nodes_for_projection, nodes_for_projection_t, nodes_for_projection_c = [],[],[]
+        for tracks in comm["tracks"].values():
+            nodes_for_projection_t += tracks
+        print("Tracks: ", len(nodes_for_projection_t))
+        for col in comm["collections"].values():
+            nodes_for_projection_c += col
+        print("Collections: ", len(nodes_for_projection_c))
+
+        nodes_for_subgraph = nodes_for_projection_t + nodes_for_projection_c
+        nodes_for_subgraph = list(set(nodes_for_subgraph))
+        print("Nodes w/o duplicates: ",len(nodes_for_subgraph))
+        g = graph.subgraph(nodes_for_subgraph)
+        print("Total CCs: ", len([len(c) for c in sorted(nx.connected_components(g), key=len, reverse=True)]))
+        print("Largest 5 CCs: ", [len(c) for c in sorted(nx.connected_components(g), key=len, reverse=True)][:5])
+        print("Smallest 5 CCs: ", [len(c) for c in sorted(nx.connected_components(g), key=len, reverse=False)][:5])
+        
+        largest_cc = max(nx.connected_components(g), key=len)
+        G_bipartite = graph.subgraph(largest_cc)
+        nodes_for_projection_t = [n for n in nodes_for_projection_t if n in G_bipartite.nodes()]
+        nodes_for_projection_c = [n for n in nodes_for_projection_c if n in G_bipartite.nodes()]
+        print("Projecting on {} nodes".format(len(set(nodes_for_projection_t))))
+
+        G_projected = bipartite.projected_graph(G_bipartite, nodes_for_projection_t, multigraph=is_multigraph)
+        return G_projected, G_bipartite
+    
     def save_community(self, pred, algo_name):
         readwrite.write_community_csv(pred, path.join(self.save_dir, "{}_communities.csv".format(algo_name)), ",")
 
     def find_communities(self, g, algorithm):
         algorithm_name = algorithm.__name__
         try:
-            print("Starting community detection for {} algorithm".format(algorithm_name))
-            if algorithm_name == "overlapping_seed_set_expansion":
-                #list of nodes as seeds (preferably each in different community)
-                list_of_seeds = []
-                community_prediction = algorithm(g, seeds=list_of_seeds)
-            else:
-                community_prediction = algorithm(g)
-            self.save_community(community_prediction, algorithm_name)
+            with timeout(60*35, exception=RuntimeError):
+                print("Starting community detection for {} algorithm".format(algorithm_name))
+                if algorithm_name == "angel":
+                    community_prediction = algorithm(g, threshold=0.3, min_community_size=500)
+                elif algorithm_name == "node_perception":
+                    community_prediction = algorithm(g, threshold=0.3, overlap_threshold=0.3, min_comm_size=500)
+                elif algorithm_name == "CPM_Bipartite":
+                    community_prediction = algorithm(g, 1)
+                elif algorithm_name == "spectral":
+                    community_prediction = algorithm(g, kmax=17)
+                else:
+                    community_prediction = algorithm(g)
+                print("Saving...")
+                self.save_community(community_prediction, algorithm_name)
         except Exception as e:
             print("Error with {} algorithm".format(algorithm_name))
             print(type(e), e)
         else:
             print("Saved communities file for {} algorithm".format(algorithm_name))
+
+    def find_common_keywords(self):
+        all_keywords = defaultdict(int)
+        for id, info in tqdm(self.collections.items()):
+            if "playlist" in info["type"]:
+                if "<a href=:" in info["description"]:
+                    decription = []
+                    for i in info["description"].split(", "):
+                        decription += i.lower().split(">")[1].split("</a")[0].split()
+                else:
+                    decription = info["description"].lower()\
+                                .replace("(","").replace(")","").replace("{","").replace("}","")\
+                                .replace("[","").replace("]","").replace("!","").replace("?","")\
+                                .replace("(","").replace(")","").replace(",","").replace(".","")\
+                                .replace("-","").replace("–","").replace(";","").replace(":","")\
+                                .replace("&","").replace("%","").replace("/","").replace("\\","")\
+                                .replace("$","").replace("|","").split()
+
+                name = info["name"].lower()\
+                                .replace("(","").replace(")","").replace("{","").replace("}","")\
+                                .replace("[","").replace("]","").replace("!","").replace("?","")\
+                                .replace("(","").replace(")","").replace(",","").replace(".","")\
+                                .replace("-","").replace("–","").replace(";","").replace(":","")\
+                                .replace("&","").replace("%","").replace("/","").replace("\\","")\
+                                .replace("$","").replace("|","").split()
+                
+                for word in name + decription:
+                    all_keywords[word] += 1
+        
+        
+        with open(path.join(self.base_dir, "phrases.json"), "w", encoding="utf-8") as f:
+            json.dump(dict(phrases=dict(sorted(all_keywords.items(), key=lambda item: item[1], reverse=True))), \
+                            f, ensure_ascii=False, indent=2)
 
 
 if __name__ == "__main__":
@@ -119,61 +195,48 @@ if __name__ == "__main__":
     data = SpotifyGraph(root, None)
     g = data.to_nx_graph()
     print("Num nodes:", len(g))
+    #data.find_common_keywords()
+    print("Bipartite?", bipartite.is_bipartite(g))
+
+
     print("Starting projection...")
-    g = data.get_projected_graph(g)
-    print("Num nodes after projection:", len(g))
+    #g_ = data.get_projected_graph(g)
+    print(len(g.nodes), bipartite.is_bipartite(g))
+    g_, gb_ = data.get_custom_projected_graph(g)
+    print(len(g_.nodes), bipartite.is_bipartite(g_))
+    print(len(gb_.nodes), bipartite.is_bipartite(gb_))
+    print("Total CCs: ", len([len(c) for c in sorted(nx.connected_components(g_), key=len, reverse=True)]))
+    print("Largest 5 CCs: ", [len(c) for c in sorted(nx.connected_components(g_), key=len, reverse=True)][:5])
+    
+    list_of_overlapping_algorithms = [algorithms.angel,
+                                    algorithms.core_expansion,
+                                    algorithms.node_perception,
+                                    algorithms.lpanni,
+                                    algorithms.graph_entropy,
+                                    algorithms.umstmo,
 
-    # GT_IDS for evaluation after community detection
-    #playlist_ids, album_ids = dataset.get_playlists_vs_albums()
+                                    #   algorithms.lemon,
+                                    #   algorithms.multicom,
+                                    #   algorithms.overlapping_seed_set_expansion,
+                                    ]
+    list_of_crisp_algorithms = [algorithms.leiden, 
+                                algorithms.infomap, 
+                                algorithms.sbm_dl,
+                                ]
+    list_of_bipartite_algorithms = [#algorithms.bimlpa, 
+                                    algorithms.condor,
+                                    algorithms.CPM_Bipartite,
+                                    #algorithms.infomap_bipartite,
+                                    algorithms.spectral,
+                                    ]
+    print("Starting community detection...\n")
 
-
-    # hand picked filter words that occour in name or description of the playlists
-    #keywords = ["fitness", "workout"]       
-    #selected_ids = dataset.get_playlists_by_keywords(keywords)
-
-    # TO-DO: community detection with different algorithms
-    list_of_overlapping_algorithms = [algorithms.aslpaw, 
-                                      #algorithms.dcs, 
-                                      #algorithms.lais2,
-                                      #algorithms.overlapping_seed_set_expansion,
-                                      #algorithms.umstmo,
-                                      #algorithms.percomvc,
-                                     ]
-    print("Starting community detection...")
-    for algo in list_of_overlapping_algorithms:
-        data.find_communities(g, algo)
+    # for algo in list_of_overlapping_algorithms:
+    #     data.find_communities(g_, algo)
+    #     print()
+    for algo in list_of_bipartite_algorithms:
+        data.find_communities(gb_, algo)
         print()
-
-
-    # JSON COLLECTIONS STRUCTURE FOR EACH PLAYLIST - example
-    # "type": "playlist",
-    # "name": "Adrenaline Workout",
-    # "num_tracks": 31,
-    # "description": "If your workout doubles as an outlet for your aggression",
-    # "ztracks": [ track ids ]
-
-
-# to je iz hw3 sam sample 
-
-            # g = girvan_newman_graph(mi)
-            # louvain = algorithms.louvain(g)
-            # walktrap = algorithms.walktrap(g)
-            # label_prop = algorithms.label_propagation(g)
-            # true_labels = classes.NodeClustering([[3*i + j for i in range(24)] for j in range(3)], g)
-
-            # a += evaluation.normalized_mutual_information(true_labels, louvain).score
-            # b += evaluation.normalized_mutual_information(true_labels, walktrap).score
-            # c += evaluation.normalized_mutual_information(true_labels, label_prop).score
-
-            ##############################################################################
-
-            # truth = [[i for i in range(1000)]]
-            # g = nx.gnm_random_graph(1000, 1000*k)
-            # true_labels = classes.NodeClustering(truth, g)
-            # louvain = algorithms.louvain(g)
-            # walktrap = algorithms.walktrap(g)
-            # label_prop = algorithms.label_propagation(g)
-
-            # a += evaluation.variation_of_information(true_labels, louvain).score
-            # b += evaluation.variation_of_information(true_labels, walktrap).score
-            # c += evaluation.variation_of_information(true_labels, label_prop).score
+    # for algo in list_of_crisp_algorithms:
+    #     data.find_communities(g_, algo)
+    #     print()

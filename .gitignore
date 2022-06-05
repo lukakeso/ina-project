@@ -1,3 +1,4 @@
 /dataset/*.json
+/dataset/*.txt
 /results/*.csv
-!dataset/filtered_graph.json
+/results/*.json
