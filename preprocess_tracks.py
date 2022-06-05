@@ -137,7 +137,7 @@ y = np.array(list(count.values()))
 mylabels = list(count)
 
 plt.pie(y, labels = mylabels)
-plt.savefig('../piechrat.png', dpi=300)
+plt.savefig('../piechart.png', dpi=300)
 plt.show() 
     
 out_file = open("dataset/tracks_slim.json", "w", encoding='utf-8')
