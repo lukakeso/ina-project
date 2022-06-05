@@ -16,6 +16,9 @@ from networkx.algorithms import bipartite
 from cdlib import algorithms, classes, evaluation, readwrite
 from tqdm import tqdm
 
+from sklearn import metrics
+
+
 G = nx.Graph()
 tracks = {}
 playlists = {}
@@ -260,6 +263,7 @@ def get_genre(genre) :
         #other_count[genre.split('"')[1]] += 1
     
     return simple_genre
+
 """
 def get_genre(genre) :
     simple_genre = 'other'
@@ -378,28 +382,48 @@ with open('dataset/tracks.json', 'r', encoding='utf-8') as file:
 nodes_proj = G_proj.nodes()
 
 
-
-counts_communities = {}
+def get_community_results(algo) :
+    counts_communities = {}
     
-with open('results/leiden_communities.csv', 'r', encoding='utf-8') as file:
-    comm_nodes = file.readline().split(',')
-    i = 0
-    all_n_sum = 0
-    while len(comm_nodes) > 1000 :
-        all_n_sum = len(comm_nodes)
-        counts_communities[i] = (defaultdict(int), all_n_sum)
-        for comm_node in comm_nodes :
-            idx_node = int(comm_node)
-            label = nodes_proj[idx_node]['label']
-            if label in tracks_slim :
-                counts_communities[i][0][tracks_slim[label]['genre']] += 1
-            else :
-                print(label + ' not found in tracks.')
-                
-        for count in counts_communities[i][0] :
-            counts_communities[i][0][count] /= all_n_sum
-        i += 1
+    maj_labeling = []
+    truth_labeling = []
+    
+    with open('results/' + algo + '_communities.csv', 'r', encoding='utf-8') as file:
         comm_nodes = file.readline().split(',')
+        i = 0
+        all_n_sum = 0
+        while len(comm_nodes) > 1000 :
+            all_n_sum = len(comm_nodes)
+            counts_communities[i] = (defaultdict(int), all_n_sum)
+            for comm_node in comm_nodes :
+                idx_node = int(comm_node)
+                label = nodes_proj[idx_node]['label']
+                
+                if label in tracks_slim :
+                    counts_communities[i][0][tracks_slim[label]['genre']] += 1
+                    truth_labeling.append(tracks_slim[label]['genre'])
+                else :
+                    print(label + ' not found in tracks.')
+                    truth_labeling.append('other')
+                    
+            for count in counts_communities[i][0] :
+                counts_communities[i][0][count] /= all_n_sum
+            majority_label = max(counts_communities[i][0], key=counts_communities[i][0].get)
+            
+            for comm_node in comm_nodes :
+                idx_node = int(comm_node)
+                maj_labeling.append(majority_label)
+            
+            i += 1
+            comm_nodes = file.readline().split(',')
+            
+            
+    report = metrics.classification_report(maj_labeling, truth_labeling)       
+    
+    with open('results/results_' + algo + '.txt', 'w') as fl:
+        fl.write(report)
+        print('Results saved to ' + os.path.join(conf['model_dir'], 'results_reg.txt'))
+        
         
 from cdlib.classes import *
 
@@ -427,7 +451,8 @@ for part in partitions :
         NMIs[part] = partitions[part].normalized_mutual_information(P).score
     else :
         NMIs[part] = partitions[part].normalized_mutual_information(P_w).score
-        
+    
+    get_community_results(part)
 print(NMIs)
 
 #sz = evaluation.size(G_proj,P_pred)
