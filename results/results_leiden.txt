@@ -1,0 +1,25 @@
+              precision    recall  f1-score   support
+
+     ambient       0.00      0.00      0.00         0
+    children       0.49      0.43      0.46      4728
+   classical       0.42      0.42      0.42     14178
+     country       0.52      0.68      0.59     14951
+  electronic       0.31      0.42      0.35     28611
+      ethnic       0.11      0.32      0.16      3038
+     hip hop       0.49      0.29      0.37     93482
+       indie       0.00      0.00      0.00         0
+        jazz       0.11      0.31      0.16      6493
+       latin       0.94      0.43      0.60     82695
+       metal       0.84      0.45      0.59     23496
+       other       0.22      0.47      0.30     49334
+         pop       0.49      0.34      0.40    122556
+       radio       0.00      0.00      0.00         0
+         rap       0.09      0.60      0.15      2725
+      reggae       0.33      0.30      0.32      4606
+        rock       0.38      0.33      0.35     45197
+  soundtrack       0.15      0.44      0.22      3591
+     worship       0.84      0.66      0.74     14385
+
+    accuracy                           0.39    514066
+   macro avg       0.35      0.36      0.33    514066
+weighted avg       0.53      0.39      0.43    514066
