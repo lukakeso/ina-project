@@ -142,7 +142,7 @@ def get_community_results(G, algo, tracks_slim) :
         comm_nodes = file.readline().split(',')
         i = 0
         all_n_sum = 0
-        while len(comm_nodes) > 1000 :
+        while len(comm_nodes) > 1 :
             all_n_sum = len(comm_nodes)
             counts_communities[i] = (defaultdict(int), all_n_sum)
             for comm_node in comm_nodes :
@@ -195,19 +195,24 @@ if __name__ == '__main__' :
     
     print("Starting projection...")
     G_proj = get_projected_graph(G_max)
-    G_w_proj = get_weighted_projected_graph(G_max, ratio=False)
+    #G_w_proj = get_weighted_projected_graph(G_max, ratio=False)
+    partitions = {}
+    
     
     list_of_overlapping_algorithms = [  #algorithms.girvan_newman,
-                                        algorithms.leiden
+                                        algorithms.leiden,
+                                        algorithms.infomap,
+                                        algorithms.louvain,
+                                        algorithms.label_propagation,
+                                        algorithms.ricci_community,
                                       ]
-    partitions = {}
     print("Starting community detection...\n")
     for algo in list_of_overlapping_algorithms:
         partitions[algo.__name__] = find_communities(G_proj, algo)
         print('Done one')
     
     list_of_overlapping_algorithms = [algorithms.leiden
-                                   ]
+                                  ]
     print("Starting community detection...\n")
     for algo in list_of_overlapping_algorithms:
         partitions[algo.__name__ + '_weighted'] =  find_communities_weight(G_w_proj, algo)
