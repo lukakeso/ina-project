@@ -2,3 +2,4 @@
 /dataset/*.txt
 /results/*.csv
 /results/*.json
+/results/*.txt

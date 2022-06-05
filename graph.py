@@ -101,7 +101,7 @@ class SpotifyGraph():
         return G_projected
     
     def get_custom_projected_graph(self, graph, is_multigraph=False):
-        with open("dataset/custom_communities.json", "r", encoding="utf-8") as f:
+        with open("dataset/custom_communities_corrected.json", "r", encoding="utf-8") as f:
             comm = json.load(f)
         nodes_for_projection, nodes_for_projection_t, nodes_for_projection_c = [],[],[]
         for tracks in comm["tracks"].values():
@@ -134,16 +134,20 @@ class SpotifyGraph():
     def find_communities(self, g, algorithm):
         algorithm_name = algorithm.__name__
         try:
-            with timeout(60*35, exception=RuntimeError):
+            with timeout(60*60, exception=RuntimeError):
                 print("Starting community detection for {} algorithm".format(algorithm_name))
                 if algorithm_name == "angel":
-                    community_prediction = algorithm(g, threshold=0.3, min_community_size=500)
+                    community_prediction = algorithm(g, threshold=0.6, min_community_size=50)
                 elif algorithm_name == "node_perception":
-                    community_prediction = algorithm(g, threshold=0.3, overlap_threshold=0.3, min_comm_size=500)
+                    community_prediction = algorithm(g, threshold=0.6, overlap_threshold=0.25, min_comm_size=50)
                 elif algorithm_name == "CPM_Bipartite":
                     community_prediction = algorithm(g, 1)
                 elif algorithm_name == "spectral":
                     community_prediction = algorithm(g, kmax=17)
+                elif algorithm_name == "frc_fgsn":
+                    community_prediction = algorithm(g, theta=0.3, eps=0.6, r=50)
+                elif algorithm_name == "principled_clustering":
+                    community_prediction = algorithm(g, cluster_count=17)
                 else:
                     community_prediction = algorithm(g)
                 print("Saving...")
@@ -208,11 +212,13 @@ if __name__ == "__main__":
     print("Total CCs: ", len([len(c) for c in sorted(nx.connected_components(g_), key=len, reverse=True)]))
     print("Largest 5 CCs: ", [len(c) for c in sorted(nx.connected_components(g_), key=len, reverse=True)][:5])
     
-    list_of_overlapping_algorithms = [algorithms.angel,
-                                    algorithms.core_expansion,
-                                    algorithms.node_perception,
-                                    algorithms.lpanni,
-                                    algorithms.graph_entropy,
+    list_of_overlapping_algorithms = [#algorithms.principled_clustering,
+                                    #algorithms.frc_fgsn,
+                                    algorithms.angel,
+                                    #algorithms.core_expansion,
+                                    #algorithms.node_perception,
+                                    #algorithms.lpanni,
+                                    #algorithms.graph_entropy,
                                     algorithms.umstmo,
 
                                     #   algorithms.lemon,
@@ -223,20 +229,20 @@ if __name__ == "__main__":
                                 algorithms.infomap, 
                                 algorithms.sbm_dl,
                                 ]
-    list_of_bipartite_algorithms = [#algorithms.bimlpa, 
-                                    algorithms.condor,
-                                    algorithms.CPM_Bipartite,
-                                    #algorithms.infomap_bipartite,
-                                    algorithms.spectral,
+    list_of_bipartite_algorithms = [algorithms.bimlpa, 
+                                    #algorithms.condor,
+                                    #algorithms.CPM_Bipartite,
+                                    algorithms.infomap_bipartite,
+                                    #algorithms.spectral,
                                     ]
     print("Starting community detection...\n")
 
-    # for algo in list_of_overlapping_algorithms:
-    #     data.find_communities(g_, algo)
-    #     print()
-    for algo in list_of_bipartite_algorithms:
-        data.find_communities(gb_, algo)
+    for algo in list_of_overlapping_algorithms:
+        data.find_communities(g_, algo)
         print()
+    # for algo in list_of_bipartite_algorithms:
+    #     data.find_communities(gb_, algo)
+    #     print()
     # for algo in list_of_crisp_algorithms:
     #     data.find_communities(g_, algo)
     #     print()

@@ -93,13 +93,16 @@ def save_community(pred, algo_name):
         readwrite.write_community_csv(pred, path.join("results/{}_communities.csv".format(algo_name)), ",")
         
         
-def find_communities(g, algorithm):
+def find_communities(g, algorithm, metadata=None):
         algorithm_name = algorithm.__name__
         community_prediction = None
         try:
             with timeout(60*TIMEOUT_MINUTES, exception=RuntimeError):
                 print("Starting community detection for {} algorithm".format(algorithm_name))
-                community_prediction = algorithm(g)
+                if algorithm_name == "eva" or algorithm_name == "ilouvain":
+                    community_prediction = algorithm(g, labels=metadata)
+                else:
+                    community_prediction = algorithm(g)
                 print("Saving...")
                 save_community(community_prediction, algorithm_name)
         except Exception as e:
@@ -117,11 +120,11 @@ def find_communities_weight(g, algorithm):
             edge_data = g.edges.data("weight", default=0)
             for edge in edge_data :
                 weights.append(edge[2])
-            with timeout(60*TIMEOUT_MINUTES, exception=RuntimeError):
-                print("Starting community detection for {} algorithm".format(algorithm_name))
-                community_prediction = algorithm(g, weights=weights)
-                print("Saving...")
-                save_community(community_prediction, algorithm_name + '_weighted')
+
+            print("Starting community detection for {} algorithm".format(algorithm_name))
+            community_prediction = algorithm(g, weights=weights)
+            print("Saving...")
+            save_community(community_prediction, algorithm_name + '_weighted')
         except Exception as e:
             print("Error with {} algorithm".format(algorithm_name))
             print(type(e), e)
@@ -141,7 +144,7 @@ def get_community_results(G, algo, tracks_slim) :
         comm_nodes = file.readline().split(',')
         i = 0
         all_n_sum = 0
-        while len(comm_nodes) > 1 :
+        while len(comm_nodes) > 1000 :
             all_n_sum = len(comm_nodes)
             counts_communities[i] = (defaultdict(int), all_n_sum)
             for comm_node in comm_nodes :
@@ -191,35 +194,40 @@ if __name__ == '__main__' :
     
     G, G_max, tracks, playlists = load_graph()
     tracks_slim = load_tracks()
+
+    invalid_keys = {'genre', 'artist', 'name', 'key', 'mode', 'popularity', 'tempo', 'loudness'}
+    metadata = {}
+    for i, info in tracks_slim.items():
+        metadata[i] = [(k,v) for k,v in info.items() if k not in invalid_keys]
     
     print("Starting projection...")
     G_proj = get_projected_graph(G_max)
-    G_w_proj = get_weighted_projected_graph(G_max, ratio=False)
-    partitions = {}
+    #G_w_proj = get_weighted_projected_graph(G_max, ratio=False)
     
-    
-    list_of_overlapping_algorithms = [  #algorithms.girvan_newman,
-                                        algorithms.leiden,
-                                        algorithms.infomap,
-                                        algorithms.louvain,
-                                        algorithms.label_propagation,
-                                        algorithms.ricci_community,
-                                        algorithms.sbm_dl,
+    list_of_overlapping_algorithms = [algorithms.ilouvain,
+                                      algorithms.eva
                                       ]
+
+    # list_of_overlapping_algorithms = [algorithms.leiden, 
+    #                                   algorithms.infomap, 
+    #                                   algorithms.sbm_dl,
+    #                                  ]
+    
+    partitions = {}
     print("Starting community detection...\n")
     for algo in list_of_overlapping_algorithms:
-        partitions[algo.__name__] = find_communities(G_proj, algo)
+        partitions[algo.__name__] = find_communities(G_proj, algo, metadata=metadata)
         print('Done one')
     
-    list_of_overlapping_algorithms = [algorithms.leiden
-                                     ]
-    print("Starting community detection...\n")
-    for algo in list_of_overlapping_algorithms:
-        partitions[algo.__name__ + '_weighted'] =  find_communities_weight(G_w_proj, algo)
-        print('Done one')
+    # list_of_overlapping_algorithms = [algorithms.leiden
+    #                                ]
+    # print("Starting community detection...\n")
+    # for algo in list_of_overlapping_algorithms:
+    #     partitions[algo.__name__ + '_weighted'] =  find_communities_weight(G_w_proj, algo)
+    #     print('Done one')
 
 
-    P_w = partition(G_w_proj, tracks_slim)
+    #P_w = partition(G_w_proj, tracks_slim)
     P = partition(G_proj, tracks_slim)
     
     #P_pred = readwrite.read_community_csv("results/leiden_communities.csv")
