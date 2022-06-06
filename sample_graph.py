@@ -21,7 +21,7 @@ from tqdm import tqdm
 from sklearn import metrics
 from load_track_metadata import load_tracks
 
-TIMEOUT_MINUTES = 35
+TIMEOUT_MINUTES = 400
 
 def load_graph(n_samples = 800000) :
     G = nx.Graph()
@@ -141,7 +141,7 @@ def get_community_results(G, algo, tracks_slim) :
         comm_nodes = file.readline().split(',')
         i = 0
         all_n_sum = 0
-        while len(comm_nodes) > 1 :
+        while len(comm_nodes) > 10 :
             all_n_sum = len(comm_nodes)
             counts_communities[i] = (defaultdict(int), all_n_sum)
             for comm_node in comm_nodes :
@@ -191,46 +191,49 @@ if __name__ == '__main__' :
     
     G, G_max, tracks, playlists = load_graph()
     tracks_slim = load_tracks()
-    
+    partitions = {}
     print("Starting projection...")
     G_proj = get_projected_graph(G_max)
-    G_w_proj = get_weighted_projected_graph(G_max, ratio=False)
-    partitions = {}
+    # G_w_proj = get_weighted_projected_graph(G_max, ratio=False)
     
     
+    # list_of_overlapping_algorithms = [algorithms.leiden
+    #                                  ]
+    # print("Starting community detection...\n")
+    # for algo in list_of_overlapping_algorithms:
+    #     partitions[algo.__name__ + '_weighted'] =  find_communities_weight(G_w_proj, algo)
+    #     print('Done one')
+
     list_of_overlapping_algorithms = [  #algorithms.girvan_newman,
-                                        algorithms.leiden,
-                                        algorithms.infomap,
-                                        algorithms.louvain,
-                                        algorithms.label_propagation,
-                                        algorithms.ricci_community,
+                                        #algorithms.leiden,
+                                        #algorithms.infomap,
+                                        #algorithms.louvain,
+                                        #algorithms.label_propagation,
                                         algorithms.sbm_dl,
+                                        #algorithms.ricci_community,
                                       ]
+
     print("Starting community detection...\n")
     for algo in list_of_overlapping_algorithms:
         partitions[algo.__name__] = find_communities(G_proj, algo)
         print('Done one')
     
-    list_of_overlapping_algorithms = [algorithms.leiden
-                                     ]
-    print("Starting community detection...\n")
-    for algo in list_of_overlapping_algorithms:
-        partitions[algo.__name__ + '_weighted'] =  find_communities_weight(G_w_proj, algo)
-        print('Done one')
 
 
-    P_w = partition(G_w_proj, tracks_slim)
+
+    #P_w = partition(G_w_proj, tracks_slim)
     P = partition(G_proj, tracks_slim)
     
     #P_pred = readwrite.read_community_csv("results/leiden_communities.csv")
     NMIs = {}
-    for part in partitions :
-        if 'weighted' in part :  
-            NMIs[part] = partitions[part].normalized_mutual_information(P_w).score
-        else :
-            NMIs[part] = partitions[part].normalized_mutual_information(P).score
+    for part in partitions:
+        if partitions[part] is not None:
+            if 'weighted' in part:  
+                NMIs[part] = partitions[part].normalized_mutual_information(P_w).score
+            else :
+                NMIs[part] = partitions[part].normalized_mutual_information(P).score
         
-        get_community_results(G_proj, part, tracks_slim)
+            get_community_results(G_proj, part, tracks_slim)
     print(NMIs)
     
     #sz = evaluation.size(G_proj,P_pred)

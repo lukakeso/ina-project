@@ -11,14 +11,17 @@ with open("dataset/custom_communities_corrected.json", "r", encoding="utf-8") as
     gt_communities = json.load(f)
 
 results_dir = os.path.join(os.getcwd(),"results")
-results = [i for i in os.listdir(results_dir) if i.endswith(".csv")]
+results = [i for i in os.listdir(results_dir) if i.endswith(".csv") and "angel" in i]
+
+
 
 for result in results:
+    
     prediction = readwrite.read_community_csv(os.path.join(results_dir,result), ",", str)
 
     with open(os.path.join(results_dir,result.split(".")[0]+".json"), "r", encoding="utf-8") as f:
         detected_communities = json.load(f)
-
+    
     print()
     algo_name = result.split(".")[0]
     print(algo_name)
@@ -65,10 +68,10 @@ for result in results:
             f.write(f'{"CLASS":<{15}}{"PRECISION":>{10}}{"RECALL":>{10}}{"F1":>{10}}{"SUPPORT":>{10}}')
             f.write("\n")
             for com, s in scores.items():
-                f.write(f'{com:<{15}}{round(s["precision"],3):>{10}}{round(s["recall"],3):>{10}}{round(s["f1"],3):>{10}}{round(s["support"],3):>{10}}')
+                f.write(f'{com:<{15}}{round(s["precision"],2):>{10}}{round(s["recall"],2):>{10}}{round(s["f1"],2):>{10}}{round(s["support"],2):>{10}}')
                 f.write("\n")
             f.write("\n")
-            f.write(f'{"weighted avg":<{15}}{round(weighted_scores["precision"],3):>{10}}{round(weighted_scores["recall"],3):>{10}}{round(weighted_scores["f1"],3):>{10}}{weighted_scores["support"]:>{10}}')
+            f.write(f'{"weighted avg":<{15}}{round(weighted_scores["precision"],2):>{10}}{round(weighted_scores["recall"],2):>{10}}{round(weighted_scores["f1"],2):>{10}}{weighted_scores["support"]:>{10}}')
     else:
         print("No communities detected...")
 # gt_list = []

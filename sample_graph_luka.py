@@ -194,15 +194,19 @@ if __name__ == '__main__' :
     
     G, G_max, tracks, playlists = load_graph()
     tracks_slim = load_tracks()
-
-    invalid_keys = {'genre', 'artist', 'name', 'key', 'mode', 'popularity', 'tempo', 'loudness'}
-    metadata = {}
-    for i, info in tracks_slim.items():
-        metadata[i] = [(k,v) for k,v in info.items() if k not in invalid_keys]
     
     print("Starting projection...")
     G_proj = get_projected_graph(G_max)
     #G_w_proj = get_weighted_projected_graph(G_max, ratio=False)
+
+    largest_cc = max(nx.connected_components(G_proj), key=len)
+    print("Total CCs: ", len([len(c) for c in sorted(nx.connected_components(G_proj), key=len)]))
+    print("Largest 5 CCs: ", [len(c) for c in sorted(nx.connected_components(G_proj), key=len, reverse=True)][:5])
+    
+    invalid_keys = {'genre', 'artist', 'name', 'key', 'mode', 'popularity', 'tempo', 'loudness'}
+    metadata = {}
+    for i, info in tracks_slim.items():
+        metadata[i] = {k:v for k,v in info.items() if k not in invalid_keys and k in G_proj.nodes()}
     
     list_of_overlapping_algorithms = [algorithms.ilouvain,
                                       algorithms.eva

@@ -5,7 +5,7 @@ from collections import defaultdict
 from tqdm import tqdm
 from cdlib import algorithms, classes, evaluation, readwrite
 
-with open("dataset/custom_communities.json", "r", encoding="utf-8") as f:
+with open("dataset/custom_communities_corrected.json", "r", encoding="utf-8") as f:
     custom_communities = json.load(f)
 
 ratio_of_genres_in_com = {}
